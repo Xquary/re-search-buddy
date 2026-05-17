@@ -1,0 +1,98 @@
+# Research Finder Configuration
+
+llm:
+  provider: "openai"       # openai, anthropic, ollama, etc. (via litellm)
+  model: "gpt-4o-mini"     # model for keyword extraction
+  api_key_env: "OPENAI_API_KEY"  # env var name for API key
+
+embedding:
+  provider: "api"          # "local" (sentence-transformers) or "api"
+  local:
+    model_name: "all-MiniLM-L6-v2"  # lightweight, good for prototyping
+  api:
+    model: "text-embedding-3-small"  # Options: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002
+    dimensions: null          # Reduce dimensions (null = use model default). text-embedding-3-small: 1536, text-embedding-3-large: 3072
+  batch_size: 32
+
+search:
+  backends:
+    - arxiv
+    - scholar
+    # - cnki  # enable when CNKI searcher is implemented
+  max_results_per_backend: 50
+  arxiv:
+    max_results: 50
+    sort_by: "relevance"
+  scholar:
+    max_results: 50
+  cnki:
+    max_results: 50
+    region: "oversea"     # "oversea" (https://oversea.cnki.net) or "china" (https://kns.cnki.net)
+    # Requires Chrome running with: --remote-debugging-port=9222
+    # Uses chrome-devtools-mcp to navigate CNKI and extract results
+  semantic_scholar:
+    api_key_env: "SEMANTIC_SCHOLAR_API_KEY"
+    max_results: 50
+    query_delay: 1.5
+  springer:
+    meta_api_key_env: "SPRINGER_META_API_KEY"   # Meta API key for searching
+    max_results: 50
+    query_delay: 1.5
+    # year_from: 2020                            # optional year filter
+    # year_to: 2025
+  scopus:
+    api_key_env: "SCOPUS_API_KEY"
+    max_results: 25        # total results per query; paginates automatically (25/page)
+    query_delay: 1.5
+    sort: "coverDate"      # "coverDate" or "relevancy"
+    # Optional field filters (comment out to disable):
+    # source_title: "Nature Energy"        # restrict to a specific journal
+    # subject_area: "ENER"                 # Scopus ASJC area code (ENGI, ENER, ENVI, SOCI, …)
+    # doc_type: "ar"                       # ar=article, re=review, cp=conference paper, bk=book
+
+ranking:
+  top_n: 10
+  similarity_threshold: 0.3   # minimum cosine similarity to include
+
+output:
+  dir: "./output"             # directory for downloaded PDFs and results
+  format: "json"              # json or csv for results metadata
+  download_fulltext: true     # whether to download PDFs of top papers
+  browser_download: false     # use Chrome browser for downloads (institutional access/cookies)
+                              # Requires Chrome running with: --remote-debugging-port=9222
+  browser_url: "http://127.0.0.1:9222"  # Chrome DevTools remote debugging URL
+  elsevier_download: true     # use Elsevier Full Text API (requires SCOPUS_API_KEY + institutional IP)
+  wiley_download: true        # use Wiley TDM API (requires WILEY_TDM_TOKEN + institutional IP)
+  wiley_delay: 2.0            # seconds between Wiley TDM requests
+  springer_download: true     # use Springer Nature Meta API to find + download OA papers (requires SPRINGER_META_API_KEY)
+  springer_delay: 2.0         # seconds between Springer Meta API requests
+  annas_fallback: true        # use Anna's Archive CLI as fallback when direct download fails
+  annas_bin: "annas-mcp"      # path to annas-mcp binary (resolved from venv/bin if present)
+
+zotero:
+  enabled: false              # master switch; set true to activate any Zotero feature
+
+  # Access mode: "api" (Zotero web API, works anywhere) or "local" (requires Zotero desktop running)
+  access_mode: "api"
+
+  # Credentials — prefer env vars (ZOTERO_API_KEY, ZOTERO_LIBRARY_ID, ZOTERO_LIBRARY_TYPE)
+  # Get your API key at: https://www.zotero.org/settings/keys
+  # Your User ID is shown on that same page as "Your userID for use in API calls"
+  api_key: ""
+  library_id: ""
+  library_type: "user"        # "user" or "group"
+
+  # Job 1: search the user's Zotero library as an additional source
+  search_library: true
+  max_results_per_query: 20
+  semantic_search: false      # also run zotero_semantic_search (needs zotero-mcp-server[semantic])
+
+  # Job 2: flag papers from other sources that already exist in the library
+  check_duplicates: true
+  duplicate_title_threshold: 0.85   # Jaccard token-overlap cutoff for title matching
+
+  # Job 3: add top-ranked papers to Zotero after the pipeline
+  export_results: false
+  export_collection: ""       # collection name to add papers to; created if absent; "" = none
+  export_tags: []             # tags to apply, e.g. ["research-finder", "2026"]
+  attach_mode: "best"         # passed to zotero_add_by_doi / zotero_add_by_url
