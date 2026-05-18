@@ -172,7 +172,8 @@ If multiple sources are picked, draft SEPARATE query sets per source.
 
 ## Style Rules
 
-- **Every user prompt uses clickable options** (2-4 choices + a `(Recommended)` default first). Never ask users to type or paste values (except raw text content).
+- **Every user prompt uses clickable options via `AskUserQuestion`** (2-4 choices + a `(Recommended)` default first). This is a HARD rule — never ask the user a free-text question, never present numbered lists for them to type a number, never say "type 1 or 2". The only exception is when you need raw content (text to ingest, file paths, pasted API keys) — and even then, frame it as "paste in your next message" after a clickable confirmation.
+- **Config / instruction cards go in `preview`, not chat.** When offering options that each carry their own instructions (e.g. "configure API X" vs "configure API Y"), use a **single-select** `AskUserQuestion` and put the full instruction card (purpose, URL, step-by-step, env line / install command) in each option's `preview` field. Multi-select hides previews — never use multiSelect for instruction-bearing pickers. Loop the single-select until the user picks "Skip / Done".
 - **Ask parameters before queries, then present both together.** Sequential questions for parameters first, then draft queries, then one final confirmation prompt.
 - **Never search before user approval.** Queries burn API credits.
 - **Match query syntax to the source** (see table above).
