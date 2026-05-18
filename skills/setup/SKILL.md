@@ -62,11 +62,135 @@ Use `AskUserQuestion` (multiSelect) offering each **missing** key, plus:
 
 If `OPENAI_API_KEY` is missing, it MUST be configured before proceeding — block exit otherwise.
 
+**CRITICAL — card-in-preview rule:** The "Configure X" picker MUST be a **single-select** `AskUserQuestion` where each option's `preview` field contains that item's full Config Card (purpose, URL, step-by-step, env line / install command). Single-select is required because `preview` only renders in single-select mode — multiSelect hides it. Each option's `description` stays one short line; the card goes in `preview`.
+
+Flow:
+- One question: "Which missing item do you want to configure first?"
+- Options: one per ❌ item (each with `preview` = its Config Card) + a final "Skip — proceed to workflow" option.
+- After the user picks one, configure it, re-run the stage check, then re-prompt with the remaining ❌ items until they choose Skip.
+
 **Collecting a key (one at a time):**
-1. Explain what it unlocks and the URL to get it
-2. User pastes value (written to `.env`, not echoed)
-3. If line exists, replace value; otherwise append
-4. Confirm saved without printing value
+1. Show the **Config Card** for that key (see below) — purpose, URL, step-by-step, env line — inline in chat BEFORE any AskUserQuestion.
+2. Offer follow-up options via `AskUserQuestion`:
+   - **Paste the key now** — user pastes value (written to `.env`, not echoed)
+   - **Open the URL only** — user will configure later
+   - **Skip**
+3. If line exists in `.env`, replace value; otherwise append. Never echo the value back.
+4. Confirm saved and re-run the Stage 2 check for that key.
+
+---
+
+### API Config Cards (canonical — show verbatim when user picks an API)
+
+**Always render the card for the selected API before asking for the value.** Do not invent URLs or steps.
+
+#### `OPENAI_API_KEY` — REQUIRED
+- **Unlocks:** all embeddings + LLM keyword extraction. Nothing works without this.
+- **Get it:** https://platform.openai.com/api-keys
+- **Steps:**
+  1. Log in (or create an account) at https://platform.openai.com
+  2. Add a payment method under Billing (pay-as-you-go is fine)
+  3. Go to API keys → **Create new secret key** → name it `re-search-buddy`
+  4. Copy the `sk-...` value (shown only once)
+- **`.env` line:** `OPENAI_API_KEY=sk-...`
+
+#### `SEMANTIC_SCHOLAR_API_KEY` — optional (recommended)
+- **Unlocks:** dedicated rate-limit pool on Semantic Scholar (avoids 429s on bulk SLR).
+- **Get it:** https://www.semanticscholar.org/product/api#api-key-form
+- **Steps:**
+  1. Fill the request form (name, email, intended use — describe academic research)
+  2. Wait 1–3 business days for the email with your key
+- **`.env` line:** `SEMANTIC_SCHOLAR_API_KEY=<key>`
+
+#### `SCOPUS_API_KEY` — optional
+- **Unlocks:** Scopus searcher + Elsevier full-text downloads. Required for SLR via Scopus.
+- **Get it:** https://dev.elsevier.com/apikey/manage
+- **Steps:**
+  1. Register / log in at https://dev.elsevier.com
+  2. Accept the API Service Agreement
+  3. **Create API Key** — set a label and the website URL of your institution
+  4. **IMPORTANT:** Scopus only authorizes requests from your institution's IP range. Use the key on campus / via VPN.
+- **`.env` line:** `SCOPUS_API_KEY=<key>`
+
+#### `WILEY_TDM_TOKEN` — optional
+- **Unlocks:** Wiley TDM full-text PDF downloads.
+- **Get it:** https://onlinelibrary.wiley.com/library-info/resources/text-and-datamining
+- **Steps:**
+  1. Your institution must have a Wiley subscription
+  2. Email Wiley TDM (`tdm@wiley.com`) from your institutional address requesting a TDM client token
+  3. Wait for the emailed token (usually a few days)
+- **`.env` line:** `WILEY_TDM_TOKEN=<token>`
+
+#### `SPRINGER_META_API_KEY` — optional
+- **Unlocks:** Springer Nature metadata enrichment + open-access full text.
+- **Get it:** https://dev.springernature.com/signup
+- **Steps:**
+  1. Sign up (free)
+  2. Go to **Applications** → **Create application**
+  3. Subscribe to the **Meta API** (free tier: 5000 calls/day)
+  4. Copy the application's key
+- **`.env` line:** `SPRINGER_META_API_KEY=<key>`
+
+#### `ANNAS_SECRET_KEY` — optional
+- **Unlocks:** Anna's Archive PDF fallback when no other source has the file.
+- **Get it:** Donate at https://annas-archive.gl/donate (membership required for API)
+- **Steps:**
+  1. Make a donation at the donate page
+  2. Log in to your account → **Account → API key** → copy the secret key
+- **`.env` line:** `ANNAS_SECRET_KEY=<key>`
+
+#### `ZOTERO_API_KEY` (+ `ZOTERO_LIBRARY_ID`) — optional
+- **Unlocks:** dedup against your Zotero library + export results into a Zotero collection.
+- **Get it:** https://www.zotero.org/settings/keys/new
+- **Steps:**
+  1. Log in at https://www.zotero.org
+  2. Settings → **Feeds/API** → **Create new private key**
+  3. Allow library access (read/write if you want export); name it `re-search-buddy`
+  4. Copy the key
+  5. Find your `ZOTERO_LIBRARY_ID`:
+     - Personal library: https://www.zotero.org/settings/keys → "Your userID for use in API calls"
+     - Group library: visit the group page, ID is in the URL
+- **`.env` lines:**
+  ```
+  ZOTERO_API_KEY=<key>
+  ZOTERO_LIBRARY_ID=<numeric id>
+  ZOTERO_LIBRARY_TYPE=user   # or "group"
+  ```
+
+---
+
+### MCP / CLI Tool Config Cards
+
+When a Stage 3 tool is missing, show the matching card, then offer:
+- **Auto-install for me** — you run the install command
+- **Show command only** — user copy/pastes themselves
+- **Skip**
+
+#### `arxiv-mcp-server` (arXiv search)
+- Install: `uv tool install arxiv-mcp-server`
+- Verify: `which arxiv-mcp-server`
+
+#### `google-scholar-mcp-server` (Google Scholar search)
+- Already in project deps. If missing: `uv sync`
+- Verify: `.venv/bin/python -c "import google_scholar_server"`
+
+#### Chrome debug + Node.js (CNKI search)
+- **Node.js:**
+  - Linux/WSL: `sudo apt install -y nodejs npm`
+  - macOS: `brew install node`
+- **Launch Chrome with remote debugging** (needed every session):
+  - WSL2: `powershell.exe -Command "Start-Process 'C:\Program Files\Google\Chrome\Application\chrome.exe' -ArgumentList '--remote-debugging-port=9222','--user-data-dir=C:\tmp\chrome-debug'"`
+  - macOS: `/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug &`
+  - Linux: `google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug &`
+- Verify: `curl -s http://127.0.0.1:9222/json/version`
+
+#### `annas-mcp` (Anna's Archive PDF fallback)
+- Install: download binary from https://github.com/iosifache/annas-mcp/releases → place in `.venv/bin/annas-mcp` → `chmod +x .venv/bin/annas-mcp`
+- Verify: `ls .venv/bin/annas-mcp`
+
+#### `zotero-mcp-server` (Zotero MCP integration)
+- Install: `uv tool install zotero-mcp-server`
+- Verify: `which zotero-mcp-server`
 
 ---
 
