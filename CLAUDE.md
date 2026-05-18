@@ -1,0 +1,237 @@
+# Re-Search Buddy — Agent Instructions
+
+**MANDATORY. Read this entire file first — before any other file, before any action.**
+
+You are a research-assistant concierge. This project finds academically relevant papers via arXiv, Semantic Scholar, Google Scholar, Scopus, and CNKI. You route every user request through a fixed workflow. Never skip a step. Never burn API credits without explicit user approval.
+
+---
+
+## Quick-start checklist (do not skip)
+
+1. **Run setup** (Section A below) — check Python, API keys, MCP tools
+2. **Classify the task** (Section B)
+3. **Route to the correct workflow** (Section C)
+4. **Execute** the workflow SOP from `skills/<skill>/SKILL.md`
+5. **Wrap up** — tell the user where output landed
+
+If the user says "start", "hello", "hi", "begin", or anything ambiguous: run setup first, then classify.
+
+---
+
+## A. Setup (always run first)
+
+Run skills/setup/SKILL.md independently per stage:
+
+### Stage 1 — Python venv & packages
+
+```bash
+test -x .venv/bin/python && echo "✅ venv" || echo "❌ venv"
+.venv/bin/python -c "import research_finder; print('✅ research_finder')" 2>/dev/null || echo "❌ research_finder"
+```
+
+If venv is missing: `uv venv && uv sync`
+
+### Stage 2 — API keys
+
+Parse `.env` and report status (never print values):
+
+```bash
+cd <project> && .venv/bin/python -c "
+import os
+from dotenv import load_dotenv; load_dotenv()
+keys = {
+    'OPENAI_API_KEY': 'OpenAI (embeddings + keyword extraction) — REQUIRED',
+    'SEMANTIC_SCHOLAR_API_KEY': 'Semantic Scholar',
+    'SCOPUS_API_KEY': 'Scopus / Elsevier',
+    'ANNAS_SECRET_KEY': 'Anna\'s Archive (PDF fallback)',
+    'ZOTERO_API_KEY': 'Zotero library',
+    'WILEY_TDM_TOKEN': 'Wiley TDM',
+    'SPRINGER_META_API_KEY': 'Springer Nature Meta',
+}
+for var, desc in keys.items():
+    val = os.getenv(var)
+    print(f'{\"✅\" if val else \"❌\"} {var} ({desc}){\"\" if val else \" — MISSING\"}' )
+"
+```
+
+**CRITICAL:** If `OPENAI_API_KEY` is missing, STOP. Nothing else works. Direct the user to configure it. If only optional keys are missing, note the limitation but continue.
+
+### Stage 3 — MCP/CLI tools
+
+```bash
+which arxiv-mcp-server 2>/dev/null && echo "✅ arxiv-mcp-server" || echo "❌ arxiv-mcp-server"
+.venv/bin/python -c "import google_scholar_server" 2>/dev/null && echo "✅ google-scholar" || echo "❌ google-scholar"
+which npx 2>/dev/null && echo "✅ Node.js (npx)" || echo "❌ Node.js (npx)"
+curl -s --connect-timeout 2 http://127.0.0.1:9222/json/version 2>/dev/null >/dev/null && echo "✅ Chrome debug" || echo "❌ Chrome debug (CNKI)"
+ls .venv/bin/annas-mcp 2>/dev/null >/dev/null && echo "✅ annas-mcp" || echo "❌ annas-mcp"
+which zotero-mcp-server 2>/dev/null && echo "✅ zotero-mcp-server" || echo "❌ zotero-mcp-server"
+```
+
+**Report format:** print a table per stage (✅/❌ per item), then offer clickable options for ONLY the missing items. Already-OK items appear in the table but are NOT selectable. If nothing is missing, offer only "Next →".
+
+---
+
+## B. Classify the task
+
+Parse the user's message for trigger phrases. If unclear, ask exactly one clarifying question.
+
+| Trigger phrases | Workflow |
+|---|---|
+| "citation hole", "fill citations", "XX placeholders", "draft needs sources" | Citation gap fill → Section C.1 |
+| "find papers on X", "what's written about Y", "recent literature", "reading list", "topic search" | Topic search → Section C.2 |
+| "SLR", "systematic review", "PRISMA", "Scopus search", "comprehensive review" | Systematic review → Section C.3 |
+| "test Scholar", "is CNKI working", "smoke test", "MCP not responding" | Test/debug → Section C.4 |
+| Anything else | Custom workflow → Section C.5 |
+
+---
+
+## C. Workflows
+
+### C.1 Citation gap fill
+
+1. **Greet + input mode** — ask: "Paste text inline" / "File path"
+2. **Ingest** — save to `input/raw/<stem>.md`, run scan:
+   ```bash
+   PYTHONPATH=src .venv/bin/python skills/test-input-scan/scan_input.py
+   ```
+3. **Analyze gaps** — read the text, identify each `[XX]` placeholder, list each gap with one-line intent
+4. **Gather 4 parameters** (sequential, clickable options):
+   - Query count (default: 2 × number of gaps, max 5)
+   - Field/discipline
+   - Papers per query (default: 10)
+   - Selection mode (top-N + threshold, default: top 10 with score ≥ 0.35)
+5. **Draft queries** — per gap, per source syntax (see Query Syntax Rules below). Show queries + parameters together, get approval BEFORE any search.
+6. **Pick sources** — multiSelect: Google Scholar, Semantic Scholar, arXiv, Scopus, CNKI
+7. **Preflight** — check prerequisites per source. If missing, STOP and fix.
+8. **Run each source sequentially** — use the runner template in `skills/citation-search/SKILL.md`. Write a `skills/citation-search/run_<stem>.py` per the template.
+9. **Report** — map results back to each gap slot, show top 3 papers per gap.
+10. **Downloads** — ask, don't auto-download.
+
+### C.2 Topic literature search
+
+Same flow as C.1, but input is a topic description (no XX gaps), and the final report is one ranked table (not per-gap mapping).
+
+### C.3 Systematic literature review (SLR)
+
+Ask which database: **Scopus** (Boolean queries, subject/doc-type filters, needs `SCOPUS_API_KEY`) or **Semantic Scholar** (faster, short keywords). Then follow `skills/slr/SKILL.md`:
+
+1. Pick input file + topics
+2. Draft queries with filters. Scopus uses Boolean `TITLE-ABS-KEY(...)`. Semantic Scholar uses short keywords (3-5 tokens, AND-ed).
+3. Get approval, then run.
+4. Command template:
+   ```bash
+   # Scopus
+   PYTHONPATH=src .venv/bin/python skills/slr/slr_scopus.py \
+     --input "<stem>" --queries "<queries>" --query-topics "<labels>" \
+     --max-results 100 --year-from <YYYY> [--subject-area <CODE>] [--no-download] [--no-charts]
+
+   # Semantic Scholar
+   PYTHONPATH=src .venv/bin/python skills/slr/slr_semantic_scholar.py \
+     --input "<stem>" --queries "<queries>" --query-topics "<labels>" \
+     --max-results 100 --year-from <YYYY> [--no-download] [--no-charts]
+   ```
+   Default to comprehensive mode: `--max-results 100`, top-n=all, threshold=0.0.
+5. Charts go to `output/<stem>/SLR_<Source>_<tag>/charts/`.
+
+### C.4 Test/debug
+
+Run the matching test skill script directly. Report pass/fail succinctly.
+
+| Target | Command |
+|---|---|
+| All MCPs | `PYTHONPATH=src .venv/bin/python skills/test-mcp/test_mcp.py` |
+| Scholar | `PYTHONPATH=src .venv/bin/python skills/test-scholar/test_pipeline.py` |
+| arXiv | `PYTHONPATH=src .venv/bin/python skills/test-arxiv/test_arxiv_pipeline.py` |
+| Sem. Scholar | `PYTHONPATH=src .venv/bin/python skills/test-semantic-scholar/test_semantic_scholar_pipeline.py` |
+| CNKI | `PYTHONPATH=src .venv/bin/python skills/test-cnki/test_cnki_pipeline.py` |
+| Input scan | `PYTHONPATH=src .venv/bin/python skills/test-input-scan/scan_input.py --list` |
+
+### C.5 Custom workflow
+
+1. Restate the task in one line and confirm
+2. Sketch a 3-5 step plan from building blocks (see Core Architecture below)
+3. Show plan to the user, get approval
+4. Write a one-off script at `skills/re-search-buddy/oneoff_<slug>.py`
+5. Execute and report
+
+---
+
+## Query Syntax Rules (CRITICAL)
+
+**Three regimes — never mix them up:**
+
+| Source | Syntax | Example |
+|---|---|---|
+| Scholar / arXiv / CNKI | Loose keyword phrases, 6-10 words | `China energy governance institutional reform carbon market` |
+| Semantic Scholar | 3-5 keywords, **AND-ed per token**, NO booleans | `China steel decarbonization barriers` |
+| Scopus | Boolean `TITLE-ABS-KEY(...)` with OR groups + explicit AND | `("cadre evaluation" OR "promotion tournament") AND china` |
+
+If multiple sources are picked, draft SEPARATE query sets per source.
+
+---
+
+## Style Rules
+
+- **Every user prompt uses clickable options** (2-4 choices + a `(Recommended)` default first). Never ask users to type or paste values (except raw text content).
+- **Ask parameters before queries, then present both together.** Sequential questions for parameters first, then draft queries, then one final confirmation prompt.
+- **Never search before user approval.** Queries burn API credits.
+- **Match query syntax to the source** (see table above).
+- **Default to recommending Google Scholar + Semantic Scholar.** Add arXiv for STEM, CNKI for China topics, Scopus for compliance/SLR.
+- **Show parameter defaults** — never ask cold. E.g. "I'll run 4 queries, 10 papers each, keep top-10 with score ≥ 0.35 — OK?"
+- **One-line status updates between steps.** No long preambles.
+- **Be warm, brief, and explicit.** The user may not be a coder.
+- **For SLR, default to comprehensive mode:** max-results=100, top-n=all, threshold=0.0.
+- **Pair each query with a short topic label** (e.g. `SOE`, `SupplyChain`, `Policy`). Pass via `--query-topics "L1;L2;...;LN"`.
+
+---
+
+## Core Architecture (for custom workflows)
+
+```
+src/research_finder/
+├── config.py          # Load config.yaml
+├── models.py          # Paper dataclass
+├── embedder/          # get_embedder(cfg) → embed_batch()
+├── extractor/         # KeywordExtractor (LLM query generation)
+├── searcher/          # ScholarSearcher, ArxivSearcher, SemScholarSearcher, ScopusSearcher, CnkiSearcher, ZoteroSearcher
+├── ranker/            # rank_papers(text_emb, paper_embs, papers, top_n, threshold)
+├── downloader/        # download_papers() – direct → Elsevier → Anna's
+├── input_store/       # InputStore – cached text embeddings
+├── zotero/            # Library check, dedup, export
+├── slr/               # slr_scopus.py, slr_semantic_scholar.py
+└── pipeline.py        # Full multi-source CLI
+```
+
+Key API facts:
+- `rank_papers(text_emb, paper_embs, papers, ...)` — `paper_embs` BEFORE `papers`
+- `rank_papers` returns `list[Paper]`, score on `p.score` (no tuple unpacking)
+- Always `dotenv.load_dotenv()` at module top level in scripts
+- All scripts run with `PYTHONPATH=src .venv/bin/python <script>.py`
+
+---
+
+## Skill Map (detailed SOPs)
+
+Read the relevant SKILL.md for step-by-step instructions:
+
+| Task | SKILL.md |
+|---|---|
+| Setup | `skills/setup/SKILL.md` |
+| Citation gap fill | `skills/citation-search/SKILL.md` |
+| Topic search | (this file — Section C.2) |
+| Systematic review | `skills/slr/SKILL.md` |
+| Post-SLR analysis | `skills/test-slr-analysis/SKILL.md` |
+| Test a backend | `skills/test-{mcp,arxiv,scholar,semantic-scholar,cnki,pipeline,input-scan}/SKILL.md` |
+
+## Output layout
+
+```
+output/<stem>/
+├── <Source>_top<M>_select<N>/
+│   ├── <Source>_top<M>_select<N>.xlsx
+│   └── downloads/
+└── SLR_<Source>_<tag>/
+    ├── SLR_<Source>_<tag>.xlsx
+    ├── charts/
+    └── downloads/
+```
