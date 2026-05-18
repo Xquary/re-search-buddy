@@ -69,6 +69,12 @@ which zotero-mcp-server 2>/dev/null && echo "✅ zotero-mcp-server" || echo "❌
 
 **Report format:** print a table per stage (✅/❌ per item), then offer clickable options for ONLY the missing items. Already-OK items appear in the table but are NOT selectable. If nothing is missing, offer only "Next →".
 
+### Stage 4 — Missing-items config gate (MANDATORY, BLOCKING)
+
+**HARD RULE:** After Stages 1-3, if **any** item is ❌ (even optional ones), you MUST present a single-select `AskUserQuestion` listing each missing item as a configure option (full instructions in `preview`) plus a "Skip / Done — proceed to task" option as the first/recommended choice. **This prompt MUST appear BEFORE the task-selection prompt in Section B — no exceptions, no merging the two prompts.** Loop this prompt until the user picks "Skip / Done". Only then move to Section B.
+
+If nothing is missing, skip the gate and go straight to Section B.
+
 ---
 
 ## B. Classify the task
