@@ -71,12 +71,15 @@ Flow:
 
 **Collecting a key (one at a time):**
 1. Show the **Config Card** for that key (see below) — purpose, URL, step-by-step, env line — inline in chat BEFORE any AskUserQuestion.
-2. Offer follow-up options via `AskUserQuestion`:
-   - **Paste the key now** — user pastes value (written to `.env`, not echoed)
+2. Offer follow-up options via a **single-select** `AskUserQuestion`. The first/recommended option MUST be a paste slot — `AskUserQuestion` auto-appends an "Other" free-text input, which is where the user pastes:
+   - **Paste value via "Other" ↓** *(Recommended)* — description: "Click \"Other\" below and paste the token — I'll write it to .env"
    - **Open the URL only** — user will configure later
+   - **I added it to .env manually — re-check**
    - **Skip**
-3. If line exists in `.env`, replace value; otherwise append. Never echo the value back.
+3. When the user picks the paste option, read the value they typed into "Other". If the line exists in `.env`, replace it; otherwise append. Never echo the value back in chat.
 4. Confirm saved and re-run the Stage 2 check for that key.
+
+**HARD RULE — never ask the user to paste a secret in a chat message while a clickable picker is on screen.** The "Other" field is the paste slot. Tell them so explicitly in the option description.
 
 ---
 
