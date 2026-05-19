@@ -116,30 +116,29 @@ SLR xlsx
 ```bash
 cd /path/to/research_finder
 
-# Run all analyses (both keyword_clean and missing_clean)
-PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/analysis_yearly_trend.py
-PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/analysis_citations.py
-PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/analysis_journals.py
-PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/analysis_subset_overlap.py
-PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/analysis_keyword_network.py
-PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/analysis_topic_modeling.py
-PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/analysis_geographic.py
-PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/analysis_wordcloud.py
-PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/analysis_subset_tfidf.py
+# Run all analyses (both keyword_clean and missing_clean) via the driver:
+PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/run_all_analyses.py \
+  --xlsx "output/<stem>/SLR_Scopus_<tag>/SLR_Scopus_<tag>.xlsx" \
+  --exclude-journals "Journal1|Journal2|..."
+
+# Individual scripts (for debugging one chart at a time):
+PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/analysis_yearly_trend.py --xlsx <path> --sheet keyword_verified_clean --subdir keyword_clean
+PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/analysis_citations.py --xlsx <path> --sheet keyword_verified_clean --subdir keyword_clean
+# ... etc
 ```
 
 ## Script Inventory
 
 | Script | Sheet(s) | Phase | Output |
 |--------|----------|-------|--------|
-| `analysis_yearly_trend.py` | both | Profiling | `1.1_yearly_trend_by_subset.png` (1×2: absolute + % stacked) |
-| `analysis_citations.py` | both | Profiling | `1.2_citations_distribution.png` (adaptive panels) |
+| `analysis_yearly_trend.py` | both | Profiling | `1.1_yearly_trend.png` (1×2: absolute + % stacked) |
+| `analysis_citations.py` | both | Profiling | `1.2_citations.png` (adaptive panels) |
 | `analysis_journals.py` | both | Profiling | `1.3_journal_coverage.png` (2×2: coverage + year trend) |
 | `analysis_subset_overlap.py` | keyword_clean | Profiling | `1.4_subset_overlap.png` (bar + chord) |
 | `analysis_keyword_network.py` | keyword_clean | Content | `2.1_keyword_network.png` (1×2: topic-term bars + graph) |
-| `analysis_topic_modeling.py` | both | Content | `2.2_topic_analysis.png` (t-SNE + stacked bars) |
-| `analysis_geographic.py` | both | Content | `2.3_geographic_distribution.png` (per-subset or overall) |
-| `analysis_wordcloud.py` | both | Visuals | `3.1_wordclouds.png` (2×2) or `3.1_wordcloud_overall.png` |
+| `analysis_topic_modeling.py` | both | Content | `2.2_topic_modeling.png` (t-SNE + stacked bars) |
+| `analysis_geographic.py` | both | Content | `2.3_geographic.png` (per-subset or overall) |
+| `analysis_wordcloud.py` | both | Visuals | `3.1_wordclouds_by_subset.png` (2×2) or `3.1_wordcloud_overall.png` |
 | `analysis_subset_tfidf.py` | keyword_clean | Visuals | `3.2_subset_tfidf.png` (per-subset TF-IDF) |
 
 ## Figure Numbering Convention
@@ -148,14 +147,15 @@ All charts follow a `{phase}.{number}_{name}.png` scheme, ordered from most gene
 
 | # | Figure | Layout | Phase | Logic |
 |---|--------|--------|-------|-------|
-| 1.1 | `yearly_trend_by_subset` | 1×2 | Profiling | *When* — absolute + 100% stacked bars |
-| 1.2 | `citations_distribution` | 2×2 | Profiling | *Impact* — distribution, boxplot, top-cited, score vs cites |
-| 1.3 | `journal_coverage` | 2×2 | Profiling | *Where* — subset coverage + year trend combined |
+| 1.1 | `yearly_trend` | 1×2 | Profiling | *When* — absolute + 100% stacked bars |
+| 1.2 | `citations` | 2×2 | Profiling | *Impact* — distribution, boxplot, top-cited, score vs cites |
+| 1.3 | `journal_coverage` | 2×2 | Profiling | *Where* — journal distribution + year trend combined |
 | 1.4 | `subset_overlap` | 1×2 | Profiling | *Theme overlap* — exclusive/overlap bars + chord diagram |
 | 2.1 | `keyword_network` | 1×2 | Content | *Term relationships* — topic-term coefficient bars + network graph |
-| 2.2 | `topic_analysis` | 2×2 | Content | *Latent themes* — NMF t-SNE + topic-year stacked bars |
-| 2.3 | `geographic_distribution` | 2×2 | Content | *Where (authors)* — per-subset country distribution |
-| 3.1 | `wordclouds` | 2×2 | Visuals | *Synthesis* — combined word clouds per subset |
+| 2.2 | `topic_modeling` | 2×2 | Content | *Latent themes* — NMF t-SNE + topic-year stacked bars |
+| 2.3 | `geographic` | 2×2 | Content | *Where (authors)* — per-subset country distribution |
+| 3.1 | `wordclouds_by_subset` | 2×2 | Visuals | *Synthesis* — combined word clouds per subset (keyword_clean) |
+| 3.1 | `wordcloud_overall` | 1×1 | Visuals | *Synthesis* — single word cloud (missing_clean) |
 | 3.2 | `subset_tfidf` | 2×2 | Visuals | *Distinctive terms* — per-subset TF-IDF keywords |
 
 Directories mirror phases: `1_profiling/`, `2_content/`, `3_visuals/`
@@ -166,25 +166,26 @@ Directories mirror phases: `1_profiling/`, `2_content/`, `3_visuals/`
 output/<input_stem>/SLR_Scopus_<tag>/charts/analysis/
 ├── keyword_clean/              # keyword-matched papers
 │   ├── 1_profiling/
-│   │   ├── 1.1_yearly_trend_by_subset.png
-│   │   ├── 1.2_citations_distribution.png
+│   │   ├── 1.1_yearly_trend.png
+│   │   ├── 1.2_citations.png
 │   │   ├── 1.3_journal_coverage.png
 │   │   └── 1.4_subset_overlap.png
 │   ├── 2_content/
 │   │   ├── 2.1_keyword_network.png
-│   │   ├── 2.2_topic_analysis.png
-│   │   └── 2.3_geographic_distribution.png
+│   │   ├── 2.2_topic_modeling.png
+│   │   └── 2.3_geographic.png
 │   └── 3_visuals/
-│       ├── 3.1_wordclouds.png
+│       ├── 3.1_wordclouds_by_subset.png
 │       └── 3.2_subset_tfidf.png
 └── missing_clean/              # non-matching papers
     ├── 1_profiling/
-    │   ├── 1.1_yearly_trend_by_subset.png
-    │   ├── 1.2_citations_distribution.png
+    │   ├── 1.1_yearly_trend.png
+    │   ├── 1.2_citations.png
     │   └── 1.3_journal_coverage.png
     ├── 2_content/
-    │   ├── 2.2_topic_analysis.png
-    │   └── 2.3_geographic_distribution.png
+    │   ├── 2.1_keyword_network.png
+    │   ├── 2.2_topic_modeling.png
+    │   └── 2.3_geographic.png
     └── 3_visuals/
         └── 3.1_wordcloud_overall.png
 ```

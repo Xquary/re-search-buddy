@@ -107,7 +107,7 @@ Parse the user's message for trigger phrases. If unclear, ask exactly one clarif
    - Papers per query (default: 10)
    - Selection mode (top-N + threshold, default: top 10 with score ≥ 0.35)
 5. **Draft queries** — per gap, per source syntax (see Query Syntax Rules below). Show queries + parameters together, get approval BEFORE any search.
-6. **Pick sources** — multiSelect: Google Scholar, Semantic Scholar, arXiv, Scopus, CNKI
+6. **Pick sources** — multiSelect with **Scopus pre-selected as the recommended default**; also offer Google Scholar, Semantic Scholar, arXiv, CNKI
 7. **Preflight** — check prerequisites per source. If missing, STOP and fix.
 8. **Run each source sequentially** — use the runner template in `skills/citation-search/SKILL.md`. Write a `skills/citation-search/run_<stem>.py` per the template.
 9. **Report** — map results back to each gap slot, show top 3 papers per gap.
@@ -119,8 +119,9 @@ Same flow as C.1, but input is a topic description (no XX gaps), and the final r
 
 ### C.3 Systematic literature review (SLR)
 
-Ask which database: **Scopus** (Boolean queries, subject/doc-type filters, needs `SCOPUS_API_KEY`) or **Semantic Scholar** (faster, short keywords). Then follow `skills/slr/SKILL.md`:
+Ask which database, with **Scopus as the recommended default** (Boolean queries, subject/doc-type filters, needs `SCOPUS_API_KEY`); fallback **Semantic Scholar** (faster, short keywords). Then follow `skills/slr/SKILL.md`.
 
+**Phase 1 — Search & embed**
 1. Pick input file + topics
 2. Draft queries with filters. Scopus uses Boolean `TITLE-ABS-KEY(...)`. Semantic Scholar uses short keywords (3-5 tokens, AND-ed).
 3. Get approval, then run.
@@ -137,7 +138,46 @@ Ask which database: **Scopus** (Boolean queries, subject/doc-type filters, needs
      --max-results 100 --year-from <YYYY> [--no-download] [--no-charts]
    ```
    Default to comprehensive mode: `--max-results 100`, top-n=all, threshold=0.0.
-5. Charts go to `output/<stem>/SLR_<Source>_<tag>/charts/`.
+
+**Phase 2 — Abstract enrichment & re-rank (MANDATORY for Scopus; skip if --no-abstract-enrich)**
+5. Recover missing abstracts: `PYTHONPATH=src .venv/bin/python skills/slr/recover_abstracts.py "<xlsx>"`
+6. Re-embed + re-rank with enriched abstracts: `PYTHONPATH=src .venv/bin/python skills/slr/slr_rank.py --xlsx "<xlsx>" --input "<stem>"`
+   → This re-computes embeddings for all papers using their now-enriched abstracts, then ranks by cosine similarity against the input text. Uses `--top-n` and `--threshold` (default: all, threshold 0.0).
+
+**Phase 3 — Post-SLR analysis (MANDATORY — 3 stages, in order)**
+7. **Keyword verification** — define topic-term buckets, confirm with user, then:
+   ```bash
+   PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/enrich_keyword_clean.py \
+     --xlsx "<xlsx>" --buckets-yaml skills/test-slr-analysis/buckets_<stem>.yaml
+   ```
+   Creates `keyword_verified_clean` + `missing_topic_only_clean` sheets. Each paper gets a `keyword_hit` column (semicolon-separated matched bucket names).
+
+8. **Journal exclusion** — print top-25 journals with counts, offer multi-select to drop noisy journals (MDPI mega-journals: Sustainability Switzerland, Energies, etc.; Chinese-language trades: Kang T'Ieh; off-topic environmental chemistry: J Hazard Mater, Chemosphere, Water Res, etc.)
+
+9. **Run all 10 analyses** on both sheets:
+   ```bash
+   PYTHONPATH=src .venv/bin/python skills/test-slr-analysis/run_all_analyses.py \
+     --xlsx "<xlsx>" --exclude-journals "Title1|Title2|..."
+   ```
+   See `skills/test-slr-analysis/SKILL.md`. Output structure (MANDATORY figure numbering, 3 phases, 10 analyses total):
+
+   ```
+   charts/analysis/
+   ├── keyword_clean/     (keyword-matched papers)
+   │   ├── 1_profiling/   1.1_yearly_trend.png, 1.2_citations.png,
+   │   │                   1.3_journal_coverage.png, 1.4_subset_overlap.png
+   │   ├── 2_content/     2.1_keyword_network.png, 2.2_topic_modeling.png,
+   │   │                   2.3_geographic.png
+   │   └── 3_visuals/     3.1_wordclouds_by_subset.png, 3.2_subset_tfidf.png
+   └── missing_clean/     (non-matching papers)
+       ├── 1_profiling/   1.1_yearly_trend.png, 1.2_citations.png,
+       │                   1.3_journal_coverage.png
+       ├── 2_content/     2.1_keyword_network.png, 2.2_topic_modeling.png,
+       │                   2.3_geographic.png
+       └── 3_visuals/     3.1_wordcloud_overall.png
+   ```
+
+   **NEVER skip Phase 2 or Phase 3.** After Phase 1, always offer Phase 2 (re-rank) → Phase 3 (analysis). The figure structure with `{phase}.{number}_{name}.png` numbering and 3 subdirs (`1_profiling`, `2_content`, `3_visuals`) is MANDATORY.
 
 ### C.4 Test/debug
 
@@ -184,7 +224,7 @@ If multiple sources are picked, draft SEPARATE query sets per source.
 - **Ask parameters before queries, then present both together.** Sequential questions for parameters first, then draft queries, then one final confirmation prompt.
 - **Never search before user approval.** Queries burn API credits.
 - **Match query syntax to the source** (see table above).
-- **Default to recommending Google Scholar + Semantic Scholar.** Add arXiv for STEM, CNKI for China topics, Scopus for compliance/SLR.
+- **Default to recommending Scopus** for every workflow (citation gap fill, topic search, SLR). It requires `SCOPUS_API_KEY` — if missing, prompt the user to configure it before proposing fallbacks. Add Google Scholar / Semantic Scholar as secondary, arXiv for STEM, CNKI for China topics.
 - **Show parameter defaults** — never ask cold. E.g. "I'll run 4 queries, 10 papers each, keep top-10 with score ≥ 0.35 — OK?"
 - **One-line status updates between steps.** No long preambles.
 - **Be warm, brief, and explicit.** The user may not be a coder.
@@ -241,5 +281,22 @@ output/<stem>/
 └── SLR_<Source>_<tag>/
     ├── SLR_<Source>_<tag>.xlsx
     ├── charts/
+    │   └── analysis/
+    │       ├── keyword_clean/
+│   │   ├── 1_profiling/   1.1_yearly_trend.png, 1.2_citations.png,
+│   │   │                    1.3_journal_coverage.png,
+│   │   │                    1.4_subset_overlap.png
+│   │   ├── 2_content/     2.1_keyword_network.png,
+│   │   │                    2.2_topic_modeling.png,
+│   │   │                    2.3_geographic.png
+│   │   └── 3_visuals/     3.1_wordclouds_by_subset.png,
+│   │                        3.2_subset_tfidf.png
+│   └── missing_clean/
+│       ├── 1_profiling/   1.1_yearly_trend.png, 1.2_citations.png,
+│       │                    1.3_journal_coverage.png
+    │           ├── 2_content/     2.1_keyword_network.png,
+    │           │                    2.2_topic_modeling.png,
+    │           │                    2.3_geographic.png
+    │           └── 3_visuals/     3.1_wordcloud_overall.png
     └── downloads/
 ```
