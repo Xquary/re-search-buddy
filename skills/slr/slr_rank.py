@@ -115,35 +115,44 @@ print(f"Updating XLSX: {xlsx_path}")
 rank_col = idx["rank"] + 1
 score_col = idx["score"] + 1
 
-# Build ranked lookup: scopus_id → (rank, score)
-ranked_map: dict[str, tuple[int, float]] = {}
+# Build lookup: scopus_id → (rank, score, paper)
+ranked_lookup: dict[str, tuple[int, float, Paper]] = {}
 for new_rank, p in enumerate(ranked, 1):
     key = str(p.scopus_id or "").strip()
     if key:
-        ranked_map[key] = (new_rank, round(p.score, 6))
+        ranked_lookup[key] = (new_rank, round(p.score, 6), p)
 
-# Collect all rows, tag with rank/score (unranked → 999999)
-data_rows = []
+# Match ranked papers to existing rows
+matched: list[tuple[int, list]] = []
+unmatched: list[list] = []
 for row_vals in rows_data:
-    rv = list(row_vals)
-    key = str(rv[idx["scopus_id"]] or rv[idx["doi"]] or rv[idx["title"]] or "").strip()
-    sort_rank, sort_score = ranked_map.get(key, (999999, 0.0))
-    rv[idx["rank"]] = sort_rank
-    rv[idx["score"]] = sort_score
-    data_rows.append((sort_rank, rv))
+    key = str(row_vals[idx["scopus_id"]] or "").strip()
+    if key in ranked_lookup:
+        sort_rank, sort_score, paper = ranked_lookup[key]
+        rv = list(row_vals)
+        rv[idx["rank"]] = sort_rank
+        rv[idx["score"]] = sort_score
+        rv[idx["abstract"]] = paper.abstract or rv[idx["abstract"]]
+        matched.append((sort_rank, rv))
+    else:
+        unmatched.append(list(row_vals))
 
-# Sort by rank ascending (most similar first)
-data_rows.sort(key=lambda x: x[0])
+# Sort matched by rank, append unmatched at end
+matched.sort(key=lambda x: x[0])
 
-# Write sorted rows back to sheet
-for r in range(2, ws.max_row + 1):
-    for c in range(1, len(headers) + 1):
-        ws.cell(row=r, column=c, value=None)
+# Replace sheet with sorted data
+sheet_name = args.sheet or wb.active.title
+wb.remove(ws)
+ws = wb.create_sheet(sheet_name, 0)
+ws.append(headers)
+for i, (sort_rank, row_vals) in enumerate(matched):
+    ws.append(row_vals)
+    ws.cell(row=i+2, column=rank_col, value=i + 1)
+for row_vals in unmatched:
+    ws.append(row_vals)
 
-for i, (_, row_vals) in enumerate(data_rows, 2):
-    for c, val in enumerate(row_vals, 1):
-        ws.cell(row=i, column=c, value=val)
-    ws.cell(row=i, column=rank_col, value=i - 1)
+wb.save(xlsx_path)
+print(f"Updated {len(matched)} papers with scores and ranks.")
 print("Done.")
 print()
 print("Next: post-SLR analysis — keyword verification → journal exclusion → 10 analyses")

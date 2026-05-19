@@ -179,6 +179,21 @@ Ask which database, with **Scopus as the recommended default** (Boolean queries,
 
    **NEVER skip Phase 2 or Phase 3.** After Phase 1, always offer Phase 2 (re-rank) → Phase 3 (analysis). The figure structure with `{phase}.{number}_{name}.png` numbering and 3 subdirs (`1_profiling`, `2_content`, `3_visuals`) is MANDATORY.
 
+   **C.3.1 — Language metadata**
+   - Language is ONLY available via the Abstract Retrieval API (`root.language.@xml:lang`), NOT in STANDARD or COMPLETE search views.
+   - `recover_abstracts.py` extracts both abstract and language in one pass.
+   - The `language` column (values like `eng`, `chi`) is written to the xlsx by `slr_scopus.py`.
+
+   **C.3.2 — Ranking rules**
+   - `slr_rank.py` re-ranks ALL papers in a sheet, then sorts rows by score descending (most similar first).
+   - Use `--sheet` to target non-default sheets. Run on the full dataset first, then on filtered subsets.
+   - Always verify scores are populated after ranking (non-zero values in score column).
+
+   **C.3.3 — Filtering rules**
+   - Project-specific filters (language, score threshold) create a NEW sheet (e.g. `SLR_English`) rather than deleting from the main `SLR` sheet. Preserve the full dataset.
+   - Journal exclusion should be applied to both the sheets AND the charts. If journals are only excluded during chart generation, scrub the sheets afterwards so the data matches.
+   - Print top-25 journals with counts before offering exclusion options. Always include MDPI mega-journals (Sustainability Switzerland, Energies, Applied Sciences Switzerland, Water Switzerland), Chinese-language trades (Kang T'Ieh), and off-topic environmental chemistry journals in the exclusion options.
+
 ### C.4 Test/debug
 
 Run the matching test skill script directly. Report pass/fail succinctly.
