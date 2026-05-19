@@ -12,7 +12,6 @@ SCRIPTS = [
     "analysis_yearly_trend.py",
     "analysis_citations.py",
     "analysis_journals.py",
-    "analysis_journal_year_trend.py",
     "analysis_subset_overlap.py",
     "analysis_keyword_network.py",
     "analysis_topic_modeling.py",

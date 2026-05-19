@@ -108,8 +108,23 @@ Full Boolean syntax with field codes. Key operators: `TITLE-ABS-KEY(...)`, `AND`
 6. **Embed + rank** — cosine similarity against input text
 7. **Apply threshold** — drop below `--threshold`
 8. **Export XLSX** — with `topic_label` column if `--query-topics` set
-9. **Generate charts** — publications/year, top journals, thematic heatmap, score distribution
+9. **Generate basic charts** — publications/year, top journals, thematic heatmap, score distribution
 10. **Download PDFs** — direct HTTP → Elsevier API → Anna's Archive fallback
+
+### Post-SLR analysis (MANDATORY — 3 phases, run after steps 1-10)
+
+The basic SLR pipeline produces an XLSX and simple charts. For academic-quality output, you MUST continue with the full post-SLR analysis pipeline documented in `skills/test-slr-analysis/SKILL.md`. The flow is:
+
+**Phase 2 — Abstract enrichment & re-rank (MANDATORY for Scopus)**
+11. **Recover missing abstracts** — `skills/slr/recover_abstracts.py` fills in papers that lack abstracts via Scopus Abstract Retrieval API
+12. **Re-embed + re-rank** — `skills/slr/slr_rank.py` re-computes embeddings for ALL papers using freshly enriched abstracts, then re-ranks by cosine similarity against input text. This produces better scores than the in-search embedding (which used empty abstracts for some papers).
+
+**Phase 3 — Post-SLR analysis (MANDATORY)**
+13. **Keyword verification** — `enrich_keyword_clean.py` with term buckets per topic → splits into `keyword_verified_clean` (matched) and `missing_topic_only_clean` (unmatched) sheets
+14. **Journal exclusion** — filter noisy journals via `--exclude-journals "Title1|Title2|..."` (pipe-separated, case-insensitive)
+15. **Run all 10 analyses** — `run_all_analyses.py` generates 18 charts across both sheets in 3-phase structure
+
+**NEVER stop after step 8.** Always offer Phase 2 (re-rank) → Phase 3 (analysis).
 
 ## Output Structure
 
@@ -121,7 +136,20 @@ output/<input_stem>/
     │   ├── publications_per_year.png
     │   ├── top_journals.png
     │   ├── thematic_heatmap.png
-    │   └── score_distribution.png
+    │   ├── score_distribution.png
+    │   └── analysis/                         ← Post-SLR analysis charts
+    │       ├── keyword_clean/               (keyword-matched papers)
+    │       │   ├── 1_profiling/  1.1_yearly_trend.png, 1.2_citations.png,
+    │       │   │                  1.3_journal_coverage.png, 1.4_subset_overlap.png
+    │       │   ├── 2_content/    2.1_keyword_network.png, 2.2_topic_modeling.png,
+    │       │   │                  2.3_geographic.png
+    │       │   └── 3_visuals/    3.1_wordclouds_by_subset.png, 3.2_subset_tfidf.png
+    │       └── missing_clean/               (non-matching papers)
+    │           ├── 1_profiling/  1.1_yearly_trend.png, 1.2_citations.png,
+    │           │                  1.3_journal_coverage.png
+    │           ├── 2_content/    2.1_keyword_network.png, 2.2_topic_modeling.png,
+    │           │                  2.3_geographic.png
+    │           └── 3_visuals/    3.1_wordcloud_overall.png
     └── downloads/
 ```
 
