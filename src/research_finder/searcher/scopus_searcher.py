@@ -183,6 +183,7 @@ class ScopusSearcher(BaseSearcher):
                 "cited_by_count": e.get("citedby-count"),
                 "author_keywords": e.get("authkeywords"),
                 "open_access": bool(int(e.get("openaccessFlag") or e.get("openaccess") or 0)),
+                "language": e.get("dc:language"),
                 "url": next(
                     (lnk["@href"] for lnk in e.get("link", []) if lnk.get("@ref") == "scopus"),
                     None,
@@ -217,12 +218,17 @@ class ScopusSearcher(BaseSearcher):
                     or data.get("abstract-retrieval-response")
                     or {}
                 )
-                abstract = root.get("coredata", {}).get("dc:description")
+                coredata = root.get("coredata", {})
+                abstract = coredata.get("dc:description")
                 if abstract:
                     paper.abstract = abstract
                     fetched += 1
                 else:
                     empty += 1
+                # Also extract language (not available in STANDARD view)
+                lang = root.get("language", {}).get("@xml:lang")
+                if lang and not paper.language:
+                    paper.language = lang
             except Exception as e:
                 failed += 1
                 if len(errors) < 3:
@@ -302,6 +308,7 @@ class ScopusSearcher(BaseSearcher):
             open_access=item.get("open_access", False),
             author_keywords=item.get("author_keywords"),
             affiliations=item.get("affiliations"),
+            language=item.get("language"),
             metadata_line=f"citations: {cited}" if cited else None,
             source="scopus",
             retrieval_query=query,

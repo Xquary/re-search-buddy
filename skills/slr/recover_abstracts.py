@@ -48,14 +48,18 @@ def main():
     except ValueError as e:
         print(f"Error: required column missing — {e}")
         sys.exit(1)
+    lang_col = headers.index("language") if "language" in headers else None
 
-    # Find rows that need abstracts
+    # Find rows that need abstracts or language
     to_fetch: list[tuple[int, str]] = []  # (row_idx, scopus_id)
     for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
         sid = row[sid_col]
         abstract = row[abs_col]
-        if sid and str(sid).strip() and not (abstract and str(abstract).strip()):
-            to_fetch.append((row_idx, str(sid).strip()))  # 1-based row index (enumerate from 2 gives row 2,3,...)
+        language = row[lang_col] if lang_col is not None else None
+        need_abstract = sid and str(sid).strip() and not (abstract and str(abstract).strip())
+        need_language = lang_col is not None and sid and str(sid).strip() and not (language and str(language).strip())
+        if need_abstract or need_language:
+            to_fetch.append((row_idx, str(sid).strip()))
 
     if not to_fetch:
         print("All papers already have abstracts — nothing to do.")
@@ -97,12 +101,18 @@ def main():
                         or data.get("abstract-retrieval-response")
                         or {}
                     )
-                    abstract = root.get("coredata", {}).get("dc:description")
+                    coredata = root.get("coredata", {})
+                    abstract = coredata.get("dc:description")
                     if abstract:
                         ws.cell(row=row_idx, column=abs_col + 1, value=abstract)
                         fetched += 1
                     else:
                         empty += 1
+                    # Also extract language if column exists
+                    if lang_col is not None:
+                        lang = root.get("language", {}).get("@xml:lang")
+                        if lang:
+                            ws.cell(row=row_idx, column=lang_col + 1, value=lang)
                 except Exception as e:
                     failed += 1
                     if len(errors) < 3:

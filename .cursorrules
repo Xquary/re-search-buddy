@@ -107,7 +107,7 @@ Parse the user's message for trigger phrases. If unclear, ask exactly one clarif
    - Papers per query (default: 10)
    - Selection mode (top-N + threshold, default: top 10 with score ≥ 0.35)
 5. **Draft queries** — per gap, per source syntax (see Query Syntax Rules below). Show queries + parameters together, get approval BEFORE any search.
-6. **Pick sources** — multiSelect: Google Scholar, Semantic Scholar, arXiv, Scopus, CNKI
+6. **Pick sources** — multiSelect with **Scopus pre-selected as the recommended default**; also offer Google Scholar, Semantic Scholar, arXiv, CNKI
 7. **Preflight** — check prerequisites per source. If missing, STOP and fix.
 8. **Run each source sequentially** — use the runner template in `skills/citation-search/SKILL.md`. Write a `skills/citation-search/run_<stem>.py` per the template.
 9. **Report** — map results back to each gap slot, show top 3 papers per gap.
@@ -119,7 +119,7 @@ Same flow as C.1, but input is a topic description (no XX gaps), and the final r
 
 ### C.3 Systematic literature review (SLR)
 
-Ask which database: **Scopus** (Boolean queries, subject/doc-type filters, needs `SCOPUS_API_KEY`) or **Semantic Scholar** (faster, short keywords). Then follow `skills/slr/SKILL.md`:
+Ask which database, with **Scopus as the recommended default** (Boolean queries, subject/doc-type filters, needs `SCOPUS_API_KEY`); fallback **Semantic Scholar** (faster, short keywords). Then follow `skills/slr/SKILL.md`:
 
 1. Pick input file + topics
 2. Draft queries with filters. Scopus uses Boolean `TITLE-ABS-KEY(...)`. Semantic Scholar uses short keywords (3-5 tokens, AND-ed).
@@ -184,7 +184,7 @@ If multiple sources are picked, draft SEPARATE query sets per source.
 - **Ask parameters before queries, then present both together.** Sequential questions for parameters first, then draft queries, then one final confirmation prompt.
 - **Never search before user approval.** Queries burn API credits.
 - **Match query syntax to the source** (see table above).
-- **Default to recommending Google Scholar + Semantic Scholar.** Add arXiv for STEM, CNKI for China topics, Scopus for compliance/SLR.
+- **Default to recommending Scopus** for every workflow (citation gap fill, topic search, SLR). It requires `SCOPUS_API_KEY` — if missing, prompt the user to configure it before proposing fallbacks. Add Google Scholar / Semantic Scholar as secondary, arXiv for STEM, CNKI for China topics.
 - **Show parameter defaults** — never ask cold. E.g. "I'll run 4 queries, 10 papers each, keep top-10 with score ≥ 0.35 — OK?"
 - **One-line status updates between steps.** No long preambles.
 - **Be warm, brief, and explicit.** The user may not be a coder.

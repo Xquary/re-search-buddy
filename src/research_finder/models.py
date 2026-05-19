@@ -32,3 +32,4 @@ class Paper:
     open_access: bool = False
     author_keywords: str | None = None
     affiliations: str | None = None  # semicolon-separated "Org; City; Country" strings
+    language: str | None = None  # dc:language from Scopus STANDARD view (e.g. "English", "Chinese")
